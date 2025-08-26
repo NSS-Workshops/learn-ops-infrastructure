@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    container_name: learn-ops-db
+    environment:
+      POSTGRES_DB: ${LEARN_OPS_DB:-learnopsdev}
+      POSTGRES_USER: ${LEARN_OPS_USER:-learnopsdev}
+      POSTGRES_PASSWORD: ${LEARN_OPS_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - learn-ops-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${LEARN_OPS_USER:-learnopsdev} -d ${LEARN_OPS_DB:-learnopsdev}",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Django API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: learn-ops-api
+    ports:
+      - "8000:8000"
+    environment:
+      DEBUG: ${DEBUG:-True}
+      DEVELOPMENT_MODE: ${DEVELOPMENT_MODE:-True}
+      LEARN_OPS_DJANGO_SECRET_KEY: ${LEARN_OPS_DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
+      LEARN_OPS_ALLOWED_HOSTS: ${LEARN_OPS_ALLOWED_HOSTS:-api.learning.local,127.0.0.1,localhost}
+      LEARN_OPS_DB: ${LEARN_OPS_DB:-learnopsdev}
+      LEARN_OPS_USER: ${LEARN_OPS_USER:-learnopsdev}
+      LEARN_OPS_PASSWORD: ${LEARN_OPS_PASSWORD:-password}
+      LEARN_OPS_HOST: db
+      LEARN_OPS_PORT: 5432
+      LEARN_OPS_CLIENT_ID: ${LEARN_OPS_CLIENT_ID}
+      LEARN_OPS_SECRET_KEY: ${LEARN_OPS_SECRET_KEY}
+      LEARNING_GITHUB_CALLBACK: ${LEARNING_GITHUB_CALLBACK:-http://localhost:3000/auth/github}
+      LEARN_OPS_SUPERUSER_NAME: ${LEARN_OPS_SUPERUSER_NAME:-admin}
+      LEARN_OPS_SUPERUSER_PASSWORD: ${LEARN_OPS_SUPERUSER_PASSWORD:-admin123}
+      SLACK_TOKEN: ${SLACK_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - .:/app
+      - static_files:/app/staticfiles
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - learn-ops-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pipenv run python manage.py check --deploy || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    driver: local
+  static_files:
+    driver: local
+
+networks:
+  learn-ops-network:
+    driver: bridge
