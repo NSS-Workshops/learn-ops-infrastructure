@@ -34,6 +34,9 @@ services:
       - LEARN_OPS_ALLOWED_HOSTS=localhost,127.0.0.1,api
       - DEBUG=True
       - DEVELOPMENT_MODE=True
+      - LEARN_OPS_DB=${LEARN_OPS_DB}
+      - LEARN_OPS_USER=${LEARN_OPS_USER}
+      - LEARN_OPS_PASSWORD=${LEARN_OPS_PASSWORD}
     ports:
       - "8000:8000"
     depends_on:
