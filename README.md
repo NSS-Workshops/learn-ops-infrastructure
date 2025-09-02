@@ -111,37 +111,14 @@ learning-platform/
 1. Navigate to the `learn-ops-api` directory
 2. Copy the environment template: 
 ```shell
-cp .env.template .env.dev
+cp .env.template .env
 ```
-3. Fill in the required values in `.env.dev`:
-   ```bash
-   # GitHub OAuth (from the OAuth app you created)
-   LEARNING_GITHUB_CALLBACK=http://localhost:3000/auth/github
-   LEARN_OPS_CLIENT_ID=your_github_client_id_here
-   LEARN_OPS_SECRET_KEY=your_github_client_secret_here
-   
-   # Database (these will be overridden by docker-compose)
-   LEARN_OPS_HOST=database
-   LEARN_OPS_PORT=5432
-   
-   # Django Secret Key 
-   LEARN_OPS_DJANGO_SECRET_KEY=your_generated_secret_key_here
-   
-   # Django Settings
-   LEARN_OPS_ALLOWED_HOSTS="api.learning.local,127.0.0.1,localhost"
-   
-   # Superuser (for Django admin access)
-   LEARN_OPS_SUPERUSER_NAME=your_admin_username
-   LEARN_OPS_SUPERUSER_PASSWORD=your_admin_password
-   
-   # Optional - Slack integration
-   SLACK_TOKEN=slack_api_token
-   ```
-
-   **Note:** The `.env.template` file shows `replace_me` for values you need to fill in. 
-   For the **LEARN_OPS_DJANGO_SECRET_KEY**, create a random string of 20-30 alphanumerical characters (*no special characters such as $%@-*)
-   Create something simple for the `LEARN_OPS_SUPERUSER_NAME` and `LEARN_OPS_SUPERUSER_PASSWORD`. 
-  
+1. Fill in the `replace_me` values in `.env`:
+  - **LEARN_OPS_CLIENT_ID**: The client ID from the OAuth app you created in Github
+  - **LEARN_OPS_SECRET_KEY**: The secret key from the OAuth app you created in Github
+  - **LEARN_OPS_DJANGO_SECRET_KEY**: Create a random string of 20-30 alphanumerical characters (*no special characters such as $%@-*)
+  - **LEARN_OPS_SUPERUSER_NAME**: Create a simple username for the django admin panel
+  - **LEARN_OPS_SUPERUSER_PASSWORD**: Create a simple password for the django admin panel
 
 ## Running with Docker
 
@@ -203,27 +180,14 @@ docker compose logs -f client
 docker compose build api
 docker compose build client
 
-# Rebuild and restart
-docker compose up --build
+# Rebuild and restart everything
+docker compose up --build --force-recreate
 ```
 
 ## Troubleshooting
 
 ### Port Conflicts
 If you get port binding errors, make sure ports 3000, 8000, and 5432 are not in use by other applications.
-
-### Database Issues
-If you encounter database problems, you can reset everything:
-```bash
-docker compose down -v
-docker compose up
-```
-
-### Permission Issues
-On Linux/Mac, if you encounter permission issues:
-```bash
-sudo chown -R $USER:$USER learn-ops-api learn-ops-client learn-ops-infrastructure
-```
 
 ## Next Steps
 
