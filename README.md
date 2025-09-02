@@ -50,7 +50,7 @@ The Learning Platform is a comprehensive education management system built for N
 After installing Docker on any platform, verify it's working:
 ```bash
 docker --version
-docker compose --version
+docker compose version
 ```
 
 ### SSH Key Setup
@@ -71,9 +71,10 @@ The Learning Platform uses GitHub for authentication. You'll need to create your
    - **Homepage URL:** `http://localhost:3000`
    - **Authorization callback URL:** `http://localhost:8000/auth/github/callback`
    - **Description:** (optional)
-5. Click **Register Application**
-6. Click **Generate a new client secret**
-7. **Keep this tab open** - you'll need both the Client ID and Client Secret for the next step
+5. Leave **Enable Device Flow** unchecked
+6. Click **Register Application**
+7. Click **Generate a new client secret**
+8. **Keep this tab open** - you'll need both the Client ID and Client Secret for the next step
 
 ## Getting Started
 
@@ -108,7 +109,10 @@ learning-platform/
 
 #### API Environment Variables
 1. Navigate to the `learn-ops-api` directory
-2. Copy the environment template: `cp .env.template .env.dev`
+2. Copy the environment template: 
+```shell
+cp .env.template .env.dev
+```
 3. Fill in the required values in `.env.dev`:
    ```bash
    # GitHub OAuth (from the OAuth app you created)
@@ -120,7 +124,7 @@ learning-platform/
    LEARN_OPS_HOST=database
    LEARN_OPS_PORT=5432
    
-   # Django Secret Key (generate at https://djecrety.ir/)
+   # Django Secret Key 
    LEARN_OPS_DJANGO_SECRET_KEY=your_generated_secret_key_here
    
    # Django Settings
@@ -134,15 +138,17 @@ learning-platform/
    SLACK_TOKEN=slack_api_token
    ```
 
-   **Note:** The `.env.template` file shows `replace_me` for values you need to fill in. For the **LEARN_OPS_DJANGO_SECRET_KEY**, create a random string of 20-30 alphanumerical characters (*no special characters such as $%@-*)
-
+   **Note:** The `.env.template` file shows `replace_me` for values you need to fill in. 
+   For the **LEARN_OPS_DJANGO_SECRET_KEY**, create a random string of 20-30 alphanumerical characters (*no special characters such as $%@-*)
+   Create something simple for the `LEARN_OPS_SUPERUSER_NAME` and `LEARN_OPS_SUPERUSER_PASSWORD`. 
+  
 
 ## Running with Docker
 
 ### 1. Start the Application
 From the `learn-ops-infrastructure` directory, run:
 ```bash
-docker compose up
+docker compose up -d
 ```
 
 This will:
