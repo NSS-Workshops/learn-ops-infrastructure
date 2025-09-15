@@ -161,7 +161,7 @@ docker compose down -v
 
 ### Making Code Changes
 - The containers use volume mounts, so changes to your local code will be reflected immediately
-- API changes may require restarting the API container
+- API changes *may* require restarting the API container 
 - Client changes will hot-reload automatically
 
 ### Viewing Logs
@@ -176,13 +176,43 @@ docker compose logs -f client
 
 ### Rebuilding After Changes
 ```bash
-# Rebuild specific service
+# Rebuild specific service 
 docker compose build api
 docker compose build client
 
 # Rebuild and restart everything
 docker compose up --build --force-recreate
 ```
+
+### Running the API with VS Code Debugger
+
+To debug the api with the VS Code debugger, the api container will need to be started with VS Code. 
+
+1. Close the api VS Code instance if it is already opened. 
+2. Stop all services
+
+```shell
+docker compose down
+```
+3. Start ONLY the database and the client services
+```shell
+docker compose up -d database client
+```
+4. Open the api with VS Code. You should see a prompt in the bottom right-hand corner that says, "Folder contains a Dev Container configuration file. Reopen folder to develop in a container." Click `Reopen in Container`.
+5. Once the container has finished building, in the vscode integrated terminal you should see:
+```shell
+⠹ Creating virtual environment...✔ Successfully created virtual environment!
+Virtualenv location: /root/.local/share/virtualenvs/app-4PlAip0Q
+To activate this project's virtualenv, run pipenv shell.
+Alternatively, run a command inside the virtualenv with pipenv run.
+Installing dependencies from Pipfile.lock (9e6e4d)...
+Installing dependencies from Pipfile.lock (9e6e4d)...
+Done. Press any key to close the terminal.
+```
+6. Now you can place breakpoints in the code and start the development server with the vs code debugger.
+
+
+
 
 ## Troubleshooting
 
