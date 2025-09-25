@@ -12,6 +12,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - learningplatform
   api:
     build:
       context: ../learn-ops-api
@@ -25,6 +27,8 @@ services:
         condition: service_healthy
     volumes:
       - ../learn-ops-api:/app
+    networks:
+      - learningplatform
   client:
     build:
       context: ../learn-ops-client
@@ -36,5 +40,10 @@ services:
     volumes:
       - ../learn-ops-client:/app
       - /app/node_modules
+    networks:
+      - learningplatform
 volumes:
   learning_platform_data:
+networks:
+  learningplatform:
+    external: true
