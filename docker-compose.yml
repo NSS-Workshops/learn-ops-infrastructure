@@ -64,6 +64,18 @@ services:
       - prometheus
     networks:
       - learningplatform
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: postgres_exporter
+    env_file: ".env"
+    ports:
+     - "9187:9187"
+    depends_on:
+      - database
+    networks:
+      - learningplatform
+      
 volumes:
   learning_platform_data:
   grafana_data:
