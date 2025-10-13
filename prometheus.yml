@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'django'
+    metrics_path: '/metrics/metrics' 
+    static_configs:
+      - targets: ['api:8000']
+
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
