@@ -1033,7 +1033,7 @@ monitor_services() {
     api_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${api_url}" 2>/dev/null || echo "000")"
     client_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${client_url}" 2>/dev/null || echo "000")"
 
-    if [[ "${api_code}" == "200" ]]; then api_up="true"; fi
+    if [[ "${api_code}" == "200" || "${api_code}" == "302" ]]; then api_up="true"; fi
     if [[ "${client_code}" == "200" ]]; then client_up="true"; fi
 
     if [[ "${api_up}" == "true" && "${client_up}" == "true" ]]; then
