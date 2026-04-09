@@ -1,4 +1,6 @@
 # Learning Platform - Docker Development Setup
+## SETUP INFO 
+[SETUP_README.md](./SETUP_README.md)
 
 ## About
 
