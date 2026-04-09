@@ -1008,7 +1008,7 @@ open_in_browser() {
   local url="$1"
   case "${OS_FAMILY}" in
     macOS) open "${url}" ;;
-    WSL)   powershell.exe /c start "${url}" 2>/dev/null || true ;;
+    WSL)   cmd.exe /c start "${url}" 2>/dev/null || true ;;
     *)     xdg-open "${url}" 2>/dev/null || true ;;
   esac
 }
@@ -1016,6 +1016,7 @@ open_in_browser() {
 monitor_services() {
   step "Monitoring services"
   substep "The API loads fixtures on first start — this may take a few minutes."
+  substep "When the API is ready, you will see a Django admin login form at http://localhost:8000/admin"
   echo
 
   local api_url="http://localhost:8000/admin"
