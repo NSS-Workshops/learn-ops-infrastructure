@@ -424,11 +424,18 @@ normalize_infra_location_if_needed() {
   local source_url
   source_url="$(get_current_infra_remote)"
 
+  local current_branch
+  current_branch="$(git -C "${CURRENT_INFRA_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
   if [[ -d "${TARGET_INFRA_DIR}/.git" ]]; then
     ok "A repo already exists at the target infra path"
   else
     step "Cloning infrastructure repo into the target workspace"
-    git clone "${source_url}" "${TARGET_INFRA_DIR}"
+    if [[ -n "${current_branch}" && "${current_branch}" != "HEAD" ]]; then
+      git clone -b "${current_branch}" "${source_url}" "${TARGET_INFRA_DIR}"
+    else
+      git clone "${source_url}" "${TARGET_INFRA_DIR}"
+    fi
     ok "Cloned infrastructure repo into ${TARGET_INFRA_DIR}"
   fi
 
@@ -994,7 +1001,7 @@ monitor_services() {
   substep "The API loads fixtures on first start — this may take a few minutes."
   echo
 
-  local api_url="http://localhost:8000/"
+  local api_url="http://localhost:8000/admin"
   local client_url="http://localhost:3000/"
   local timeout=300
   local interval=5
@@ -1008,7 +1015,7 @@ monitor_services() {
     api_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${api_url}" 2>/dev/null || echo "000")"
     client_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${client_url}" 2>/dev/null || echo "000")"
 
-    if [[ "${api_code}" != "000" ]]; then api_up="true"; fi
+    if [[ "${api_code}" == "200" ]]; then api_up="true"; fi
     if [[ "${client_code}" == "200" ]]; then client_up="true"; fi
 
     if [[ "${api_up}" == "true" && "${client_up}" == "true" ]]; then
