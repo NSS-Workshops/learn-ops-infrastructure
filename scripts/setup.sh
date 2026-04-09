@@ -284,6 +284,34 @@ detect_platform() {
   section_done "Environment detection"
 }
 
+_install_gum_binary() {
+  local os_name="$1"   # Darwin or Linux
+  local arch gum_arch gum_version gum_url bin_dir
+
+  arch="$(uname -m)"
+  case "${arch}" in
+    x86_64)         gum_arch="x86_64" ;;
+    arm64|aarch64)  gum_arch="arm64" ;;
+    *)
+      warn "Unsupported architecture ${arch} — skipping gum install."
+      return 1
+      ;;
+  esac
+
+  gum_version="$(curl -fsSL --max-time 5 https://api.github.com/repos/charmbracelet/gum/releases/latest \
+    | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')"
+  gum_version="${gum_version:-0.14.5}"   # fallback if API is unreachable or rate-limited
+
+  bin_dir="${HOME}/.local/bin"
+  gum_url="https://github.com/charmbracelet/gum/releases/download/v${gum_version}/gum_${gum_version}_${os_name}_${gum_arch}.tar.gz"
+
+  mkdir -p "${bin_dir}"
+  curl -fsSL "${gum_url}" | tar -xz -C /tmp gum
+  mv /tmp/gum "${bin_dir}/gum"
+  chmod +x "${bin_dir}/gum"
+  export PATH="${bin_dir}:${PATH}"
+}
+
 ensure_gum_installed() {
   if have_cmd gum; then
     HAS_GUM="true"
@@ -298,23 +326,12 @@ ensure_gum_installed() {
       if have_cmd brew; then
         brew install gum
       else
-        warn "Homebrew not found — skipping gum install. Secret prompts will not show character count."
-        return
+        substep "Homebrew not found — downloading gum binary instead."
+        _install_gum_binary "Darwin"
       fi
       ;;
     WSL|Linux)
-      if have_cmd apt-get; then
-        sudo mkdir -p /etc/apt/keyrings
-        curl -fsSL https://repo.charm.sh/apt/gpg.key \
-          | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-        echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
-          | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
-        sudo apt-get update -qq
-        sudo apt-get install -y gum
-      else
-        warn "apt-get not found — skipping gum install. Secret prompts will not show character count."
-        return
-      fi
+      _install_gum_binary "Linux"
       ;;
     *)
       warn "Unknown platform — skipping gum install."
