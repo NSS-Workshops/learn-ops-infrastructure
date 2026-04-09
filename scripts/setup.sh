@@ -899,7 +899,7 @@ collect_config() {
     LEARN_OPS_SUPERUSER_PASSWORD \
     "Local Django Admin Password" \
     "This is only for your local development environment." \
-    "password123"
+    "admin"
 
   section_done "Configuration collection"
 }
