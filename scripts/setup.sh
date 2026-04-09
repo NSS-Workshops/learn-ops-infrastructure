@@ -284,6 +284,52 @@ detect_platform() {
   section_done "Environment detection"
 }
 
+ensure_gum_installed() {
+  if have_cmd gum; then
+    HAS_GUM="true"
+    return
+  fi
+
+  step "Installing gum (terminal prompt enhancer)"
+  substep "gum makes secret prompts show • characters so you can confirm pastes landed."
+
+  case "${OS_FAMILY}" in
+    macOS)
+      if have_cmd brew; then
+        brew install gum
+      else
+        warn "Homebrew not found — skipping gum install. Secret prompts will not show character count."
+        return
+      fi
+      ;;
+    WSL|Linux)
+      if have_cmd apt-get; then
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://repo.charm.sh/apt/gpg.key \
+          | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+        echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+          | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y gum
+      else
+        warn "apt-get not found — skipping gum install. Secret prompts will not show character count."
+        return
+      fi
+      ;;
+    *)
+      warn "Unknown platform — skipping gum install."
+      return
+      ;;
+  esac
+
+  if have_cmd gum; then
+    HAS_GUM="true"
+    ok "gum installed successfully — secret prompts will now show • per character."
+  else
+    warn "gum install appeared to succeed but gum is still not found. Falling back to silent prompts."
+  fi
+}
+
 #######################################
 # Command checks
 #######################################
@@ -1148,6 +1194,7 @@ main() {
 
   header
   detect_platform
+  ensure_gum_installed
   check_prereqs
   check_docker_running
   cleanup_docker_resources
