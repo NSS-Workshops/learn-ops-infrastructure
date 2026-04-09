@@ -378,11 +378,12 @@ check_docker_running() {
   step "Checking Docker status"
   substep "Making sure the Docker daemon is reachable"
 
-  if docker info >/dev/null 2>&1; then
-    ok "Docker daemon is running"
-  else
-    die "Docker is installed but not running. Start Docker Desktop (or Docker Engine) and rerun make setup."
-  fi
+  until docker info >/dev/null 2>&1; do
+    warn "Docker is not running. Please start Docker Desktop (or Docker Engine)."
+    printf "   Press Enter once Docker is running, or Ctrl+C to cancel...\n"
+    read -r
+  done
+  ok "Docker daemon is running"
 
   if [[ "${OS_FAMILY}" == "WSL" ]]; then
     warn "Make sure Docker Desktop has WSL integration enabled for your Ubuntu distro."
