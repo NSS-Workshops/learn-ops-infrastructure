@@ -1069,8 +1069,8 @@ monitor_services() {
   local client_code="000"
 
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
-    api_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${api_url}" 2>/dev/null || echo "000")"
-    client_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${client_url}" 2>/dev/null || echo "000")"
+    api_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${api_url}" 2>/dev/null)" || true
+    client_code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${client_url}" 2>/dev/null)" || true
 
     if [[ "${api_code}" == "200" || "${api_code}" == "302" ]]; then api_up="true"; fi
     if [[ "${client_code}" == "200" ]]; then client_up="true"; fi
@@ -1081,12 +1081,10 @@ monitor_services() {
 
     local api_label client_label
     if   [[ "${api_up}"    == "true" ]]; then api_label="ready"
-    elif [[ "${api_code}"  == "000"  ]]; then api_label="starting..."
-    else                                      api_label="HTTP ${api_code} (retrying)"
+    else                                      api_label="not ready, retrying..."
     fi
     if   [[ "${client_up}"   == "true" ]]; then client_label="ready"
-    elif [[ "${client_code}" == "000"  ]]; then client_label="starting..."
-    else                                        client_label="HTTP ${client_code} (retrying)"
+    else                                        client_label="not ready, retrying..."
     fi
 
     substep "API: ${api_label}  |  Client: ${client_label}  (${elapsed}s elapsed)"
