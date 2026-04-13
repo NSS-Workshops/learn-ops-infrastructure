@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup doctor up down logs reset restart ps
+.PHONY: setup doctor up up-api up-client-api down logs reset restart ps
 
 setup:
 	./scripts/setup.sh
@@ -10,6 +10,12 @@ doctor:
 
 up:
 	docker compose up --build -d
+
+up-api:
+	docker compose up --build -d api
+
+up-client-api:
+	docker compose up --build -d api client
 
 down:
 	docker compose down

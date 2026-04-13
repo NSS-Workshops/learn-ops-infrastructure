@@ -142,6 +142,11 @@ section_done() {
   printf "%b\n" "${GREEN}${BOLD}✓ $1 complete${RESET}"
 }
 
+# Returns 0 (true) if version $1 >= $2 (semver-aware)
+version_ge() {
+  [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
 #######################################
 # Prompt helpers
 #######################################
@@ -229,7 +234,7 @@ confirm_yes_no() {
     return 0
   fi
 
-  if [[ "${HAS_GUM}" == "true" ]]; then
+  if [[ "${HAS_GUM}" == "true" && "${RUNNING_IN_WSL}" != "true" ]]; then
     gum_confirm "$prompt"
     return $?
   fi
@@ -389,7 +394,42 @@ check_docker_running() {
     warn "Make sure Docker Desktop has WSL integration enabled for your Ubuntu distro."
   fi
 
+  check_docker_versions
+
   section_done "Docker status"
+}
+
+check_docker_versions() {
+  local required_cli="29.4.0"
+  local required_desktop="4.69.0"
+
+  # --- Docker CLI version ---
+  local cli_version
+  cli_version=$(docker version --format '{{.Client.Version}}' 2>/dev/null || true)
+
+  if [[ -z "${cli_version}" ]]; then
+    die "Could not determine Docker CLI version. Please ensure Docker is running and up to date (requires ${required_cli})."
+  fi
+
+  if version_ge "${cli_version}" "${required_cli}"; then
+    ok "Docker CLI version ${cli_version} meets requirement (>= ${required_cli})"
+  else
+    die "Docker CLI version ${cli_version} is too old. Please update Docker to version ${required_cli} or newer and rerun setup."
+  fi
+
+  # --- Docker Desktop version (macOS only) ---
+  if [[ "${OS_FAMILY}" == "mac" ]]; then
+    local desktop_version
+    desktop_version=$(defaults read /Applications/Docker.app/Contents/Info CFBundleShortVersionString 2>/dev/null || true)
+
+    if [[ -z "${desktop_version}" ]]; then
+      warn "Could not read Docker Desktop version (is Docker Desktop installed at /Applications/Docker.app?)."
+    elif version_ge "${desktop_version}" "${required_desktop}"; then
+      ok "Docker Desktop version ${desktop_version} meets requirement (>= ${required_desktop})"
+    else
+      die "Docker Desktop version ${desktop_version} is too old. Please update Docker Desktop to version ${required_desktop} or newer and rerun setup."
+    fi
+  fi
 }
 
 #######################################
@@ -676,7 +716,7 @@ check_org_membership() {
     404)
       warn "Your GitHub account does not appear to be a member of the ${org} org."
       echo
-      substep "Visit: https://github.com/organizations/${org}"
+      substep "Visit: https://github.com/organizations/${org}/invitation"
       substep "Request access or ask your instructor to invite you."
       echo
       while true; do
@@ -737,18 +777,30 @@ run_oauth_flow() {
 
   local auth_url="http://localhost:8000/auth/github/url?cohort=13&v=1"
 
-  substep "You need to authorize this app with your GitHub account."
+  substep "This step links your GitHub account to the learning platform."
+  substep "The local API will verify your identity through GitHub and create your account."
   echo
-  printf "   %s\n" "1. Open a new browser tab"
-  printf "   %s\n" "2. Visit: ${auth_url}"
-  printf "   %s\n" "3. Authorize with GitHub"
+  printf "   %b\n" "${BOLD}What to do:${RESET}"
+  printf "   %s\n" "  1. Open the link below in your browser"
+  printf "   %s\n" "  2. GitHub will ask you to authorize the LearnOps app — click Authorize"
+  printf "   %s\n" "  3. You will be redirected back to the local app — that means it worked"
+  echo
+  printf "   %b\n" "${BOLD}GitHub Authorization — LearnOps API${RESET}"
+  printf "   %b\n" "${DIM}${auth_url}${RESET}"
   echo
 
-  if confirm_yes_no "Open the URL in your browser now?"; then
+  if confirm_yes_no "Open the authorization page in your browser?"; then
     open_in_browser "${auth_url}"
   fi
 
-  confirm_yes_no "Press Y once you have completed the GitHub authorization"
+  echo
+  printf "   %b\n" "${BOLD}What to expect:${RESET}"
+  printf "   %s\n" "  Success: GitHub redirects you back to the local app (localhost:3000)"
+  printf "   %s\n" "  Error page: the API may still be loading — wait 30s and try the link again"
+  printf "   %s\n" "  'Invalid client' from GitHub: check that OAuth credentials are set in your .env"
+  echo
+
+  confirm_yes_no "Press Y once GitHub has redirected you back to the app"
 
   section_done "GitHub OAuth"
 }
@@ -850,12 +902,12 @@ collect_config() {
 
   prompt_required \
     LEARN_OPS_CLIENT_ID \
-    "GitHub OAuth Client ID" \
+    "Learn Ops Client ID" \
     "Your instructor should provide this value."
 
   prompt_required \
     LEARN_OPS_SECRET_KEY \
-    "GitHub OAuth Client Secret" \
+    "Learn Ops Secret Key" \
     "Your instructor should provide this value." \
     true
 
@@ -1003,12 +1055,12 @@ open_in_browser() {
 monitor_services() {
   step "Monitoring services"
   substep "The API loads fixtures on first start — this may take a few minutes."
-  substep "When the API is ready, you will see a Django admin login form at http://localhost:8000/admin"
+  substep "Waiting for both services to respond before continuing..."
   echo
 
   local api_url="http://localhost:8000/admin"
   local client_url="http://localhost:3000/"
-  local timeout=300
+  local timeout=600
   local interval=5
   local elapsed=0
   local api_up="false"
@@ -1027,21 +1079,31 @@ monitor_services() {
       break
     fi
 
-    substep "API: ${api_code}  Client: ${client_code}  (${elapsed}s elapsed)"
+    local api_label client_label
+    if   [[ "${api_up}"    == "true" ]]; then api_label="ready"
+    elif [[ "${api_code}"  == "000"  ]]; then api_label="starting..."
+    else                                      api_label="HTTP ${api_code} (retrying)"
+    fi
+    if   [[ "${client_up}"   == "true" ]]; then client_label="ready"
+    elif [[ "${client_code}" == "000"  ]]; then client_label="starting..."
+    else                                        client_label="HTTP ${client_code} (retrying)"
+    fi
+
+    substep "API: ${api_label}  |  Client: ${client_label}  (${elapsed}s elapsed)"
     sleep "${interval}"
     elapsed=$(( elapsed + interval ))
   done
 
   echo
   if [[ "${api_up}" == "true" ]]; then
-    ok "API is up  →  http://localhost:8000  (${api_code})"
+    ok "API is up  →  http://localhost:8000/admin"
   else
     err "API did not respond after ${timeout}s"
     warn "Check logs: cd ${TARGET_INFRA_DIR} && docker compose logs api"
   fi
 
   if [[ "${client_up}" == "true" ]]; then
-    ok "Client is up  →  http://localhost:3000  (${client_code})"
+    ok "Client is up  →  http://localhost:3000"
   else
     err "Client did not respond after ${timeout}s"
     warn "Check logs: cd ${TARGET_INFRA_DIR} && docker compose logs client"
