@@ -400,7 +400,7 @@ check_docker_running() {
 }
 
 check_docker_versions() {
-  local required_cli="29.4.0"
+  local required_cli="28.1.1"
   local required_desktop="4.69.0"
 
   # --- Docker CLI version ---
@@ -411,23 +411,48 @@ check_docker_versions() {
     die "Could not determine Docker CLI version. Please ensure Docker is running and up to date (requires ${required_cli})."
   fi
 
-  if version_ge "${cli_version}" "${required_cli}"; then
-    ok "Docker CLI version ${cli_version} meets requirement (>= ${required_cli})"
-  else
-    die "Docker CLI version ${cli_version} is too old. Please update Docker to version ${required_cli} or newer and rerun setup."
-  fi
+  while ! version_ge "${cli_version}" "${required_cli}"; do
+    err "Docker CLI version ${cli_version} is too old. Requires ${required_cli} or newer."
+    if [[ "${OS_FAMILY}" == "WSL" ]]; then
+      printf "   To update on WSL:\n"
+      printf "     1. Open Docker Desktop on Windows.\n"
+      printf "     2. Click the Docker tray icon → Settings → Software Updates → Check for updates.\n"
+      printf "     3. Or download the latest version from https://www.docker.com/products/docker-desktop/\n"
+      printf "     4. After updating, restart Docker Desktop.\n"
+    elif [[ "${OS_FAMILY}" == "macOS" ]]; then
+      printf "   To update on macOS:\n"
+      printf "     1. Click the Docker icon in the menu bar → Check for Updates.\n"
+      printf "     2. Or download the latest version from https://www.docker.com/products/docker-desktop/\n"
+      printf "     3. After updating, restart Docker Desktop.\n"
+    else
+      printf "   Please update Docker Engine to ${required_cli} or newer.\n"
+    fi
+    printf "   Press Enter once Docker has been updated and restarted, or Ctrl+C to cancel...\n"
+    read -r
+    cli_version=$(docker version --format '{{.Client.Version}}' 2>/dev/null || true)
+  done
+  ok "Docker CLI version ${cli_version} meets requirement (>= ${required_cli})"
 
   # --- Docker Desktop version (macOS only) ---
-  if [[ "${OS_FAMILY}" == "mac" ]]; then
+  if [[ "${OS_FAMILY}" == "macOS" ]]; then
     local desktop_version
     desktop_version=$(defaults read /Applications/Docker.app/Contents/Info CFBundleShortVersionString 2>/dev/null || true)
 
+    while [[ -n "${desktop_version}" ]] && ! version_ge "${desktop_version}" "${required_desktop}"; do
+      err "Docker Desktop version ${desktop_version} is too old. Requires ${required_desktop} or newer."
+      printf "   To update on macOS:\n"
+      printf "     1. Click the Docker icon in the menu bar → Check for Updates.\n"
+      printf "     2. Or download the latest version from https://www.docker.com/products/docker-desktop/\n"
+      printf "     3. After updating, restart Docker Desktop.\n"
+      printf "   Press Enter once Docker Desktop has been updated and restarted, or Ctrl+C to cancel...\n"
+      read -r
+      desktop_version=$(defaults read /Applications/Docker.app/Contents/Info CFBundleShortVersionString 2>/dev/null || true)
+    done
+
     if [[ -z "${desktop_version}" ]]; then
       warn "Could not read Docker Desktop version (is Docker Desktop installed at /Applications/Docker.app?)."
-    elif version_ge "${desktop_version}" "${required_desktop}"; then
-      ok "Docker Desktop version ${desktop_version} meets requirement (>= ${required_desktop})"
     else
-      die "Docker Desktop version ${desktop_version} is too old. Please update Docker Desktop to version ${required_desktop} or newer and rerun setup."
+      ok "Docker Desktop version ${desktop_version} meets requirement (>= ${required_desktop})"
     fi
   fi
 }
