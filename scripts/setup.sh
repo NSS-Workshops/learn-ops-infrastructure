@@ -56,7 +56,7 @@ fi
 #######################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_INFRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${HOME}/lms"
+ROOT_DIR="${HOME}/workspace/lms"
 TARGET_INFRA_DIR="${ROOT_DIR}/learn-ops-infrastructure"
 API_DIR="${ROOT_DIR}/learn-ops-api"
 CLIENT_DIR="${ROOT_DIR}/learn-ops-client"
@@ -463,7 +463,7 @@ normalize_infra_location_if_needed() {
 
   warn "Current infra repo location: ${CURRENT_INFRA_DIR}"
   warn "Expected infra repo location: ${TARGET_INFRA_DIR}"
-  substep "To match your desired final structure, the setup repo should live under ~/lms."
+  substep "To match your desired final structure, the setup repo should live under ~/workspace/lms."
 
   local source_url
   source_url="$(get_current_infra_remote)"
@@ -1252,7 +1252,7 @@ doctor_mode() {
   ok "Environment looks healthy for setup"
   echo
   printf "%b\n" "${BOLD}If you want to continue:${RESET}"
-  printf "   %s\n" "cd ~/lms/learn-ops-infrastructure"
+  printf "   %s\n" "cd ~/workspace/lms/learn-ops-infrastructure"
   printf "   %s\n" "make setup"
   echo
 }
