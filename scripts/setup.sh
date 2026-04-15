@@ -64,11 +64,11 @@ MONARCH_DIR="${ROOT_DIR}/service-monarch"
 # Repo URLs
 # Adjust these if needed.
 #######################################
-API_REPO_URL="https://github.com/NSS-Workshops/learn-ops-api.git"
-CLIENT_REPO_URL="https://github.com/NSS-Workshops/learn-ops-client.git"
-INFRA_REPO_URL_DEFAULT="https://github.com/NSS-Workshops/learn-ops-infrastructure.git"
-MONARCH_REPO_URL="https://github.com/NSS-Workshops/service-monarch.git"
-NSS_ORG="NSS-Workshops"
+API_REPO_URL="https://github.com/System-Explorer-Cohorts/learn-ops-api.git"
+CLIENT_REPO_URL="https://github.com/System-Explorer-Cohorts/learn-ops-client.git"
+INFRA_REPO_URL_DEFAULT="https://github.com/System-Explorer-Cohorts/learn-ops-infrastructure.git"
+MONARCH_REPO_URL="https://github.com/System-Explorer-Cohorts/service-monarch.git"
+NSS_ORG="System-Explorer-Cohorts"
 GITHUB_API="https://api.github.com"
 
 #######################################

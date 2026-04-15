@@ -25,7 +25,7 @@ Contents covered:
 
 ## setup.sh overview
 
-An interactive wizard that takes a fresh machine from zero to a fully running local LMS stack. It supports macOS, Ubuntu on WSL, and Linux. The script is idempotent — re-running it skips steps that are already complete.
+An interactive wizard that takes a fresh machine from zero to a fully running local LMS stack. It supports macOS, Ubuntu on WSL, should also work on Linux. The script is idempotent — re-running it skips steps that are already complete.
 
 **What it does, in order:**
 
@@ -44,8 +44,3 @@ An interactive wizard that takes a fresh machine from zero to a fully running lo
 13. **Validate layout** — confirms all expected directories and `.env` files are in place.
 14. **Optionally start the stack** — offers to run `docker compose up`, then polls until the API (`localhost:8000`) and client (`localhost:3000`) respond.
 15. **GitHub OAuth** — guides you through authorizing the LearnOps GitHub OAuth app so your local account is linked.
-
-**Flags:**
-
-- `--doctor` — skips setup and only runs the prerequisite and Docker checks.
-- `--yes` — auto-confirms all yes/no prompts (useful for scripted runs).
