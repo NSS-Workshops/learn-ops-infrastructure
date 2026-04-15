@@ -8,8 +8,6 @@ set -Eeuo pipefail
 # - Ubuntu on WSL
 # - Linux
 #
-# Optional enhancement:
-# - If `gum` is installed, prompts will look nicer.
 ###############################################################################
 
 #######################################
@@ -70,13 +68,14 @@ API_REPO_URL="https://github.com/NSS-Workshops/learn-ops-api.git"
 CLIENT_REPO_URL="https://github.com/NSS-Workshops/learn-ops-client.git"
 INFRA_REPO_URL_DEFAULT="https://github.com/NSS-Workshops/learn-ops-infrastructure.git"
 MONARCH_REPO_URL="https://github.com/NSS-Workshops/service-monarch.git"
+NSS_ORG="NSS-Workshops"
+GITHUB_API="https://api.github.com"
 
 #######################################
 # State
 #######################################
 OS_FAMILY=""
 RUNNING_IN_WSL="false"
-HAS_GUM="false"
 
 #######################################
 # Utilities
@@ -84,10 +83,6 @@ HAS_GUM="false"
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
-
-if have_cmd gum; then
-  HAS_GUM="true"
-fi
 
 hr() {
   printf "%b\n" "${CYAN}================================================================${RESET}"
@@ -150,25 +145,41 @@ version_ge() {
 #######################################
 # Prompt helpers
 #######################################
-gum_input() {
-  local placeholder="$1"
-  local prompt="$2"
-  gum input --placeholder "$placeholder" --prompt "$prompt"
-}
-
-gum_password() {
-  local prompt="$1"
-  gum input --password --prompt "$prompt"
-}
-
-gum_confirm() {
-  local prompt="$1"
-  gum confirm "$prompt"
-}
-
 prompt_text() {
   local message="$1"
   printf "%b" "${BOLD}${message}${RESET} "
+}
+
+# Stores the result of masked_read — avoids bash local-variable shadowing.
+_MASKED_INPUT=""
+
+# Read a secret value, printing • for each character so users can confirm
+# their paste landed and has the right length. Handles backspace and Enter.
+# Result is stored in the global _MASKED_INPUT.
+masked_read() {
+  _MASKED_INPUT=""
+  local char=""
+
+  while IFS= read -r -s -n1 char; do
+    if [[ -z "$char" ]]; then                                      # Enter
+      break
+    elif [[ "$char" == $'\x7f' || "$char" == $'\b' ]]; then       # Backspace
+      if [[ -n "$_MASKED_INPUT" ]]; then
+        _MASKED_INPUT="${_MASKED_INPUT%?}"
+        printf "\b \b"
+      fi
+    elif [[ "$char" == $'\x1b' ]]; then                            # ESC sequence — skip rest of sequence
+      local seq=""
+      IFS= read -r -s -n1 -t 0.05 seq || true
+      if [[ "$seq" == "[" ]]; then
+        IFS= read -r -s -n1 -t 0.05 || true   # consume final byte
+      fi
+    else
+      _MASKED_INPUT+="$char"
+      printf "•"
+    fi
+  done
+  printf "\n"
 }
 
 prompt_required() {
@@ -183,19 +194,12 @@ prompt_required() {
   printf "%b\n" "${DIM}${helper}${RESET}"
 
   while [[ -z "${value}" ]]; do
-    if [[ "${HAS_GUM}" == "true" ]]; then
-      if [[ "${secret}" == "true" ]]; then
-        value="$(gum_password "→ ")"
-      else
-        value="$(gum_input "required" "→ ")"
-      fi
+    if [[ "${secret}" == "true" ]]; then
+      printf "%b" "$(prompt_text "→ Enter value:")"
+      masked_read
+      value="$_MASKED_INPUT"
     else
-      if [[ "${secret}" == "true" ]]; then
-        read -r -s -p "$(prompt_text "→ Enter value:")" value
-        echo
-      else
-        read -r -p "$(prompt_text "→ Enter value:")" value
-      fi
+      read -r -p "$(prompt_text "→ Enter value:")" value
     fi
 
     if [[ -z "${value}" ]]; then
@@ -217,11 +221,7 @@ prompt_with_default() {
   printf "%b\n" "${BOLD}${MAGENTA}${title}${RESET}"
   printf "%b\n" "${DIM}${helper}${RESET}"
 
-  if [[ "${HAS_GUM}" == "true" ]]; then
-    value="$(gum input --placeholder "${default_value}" --prompt "→ " || true)"
-  else
-    read -r -p "$(prompt_text "→ Press Enter to use '${default_value}', or type a new value:")" value
-  fi
+  read -r -p "$(prompt_text "→ Press Enter to use '${default_value}', or type a new value:")" value
 
   value="${value:-$default_value}"
   printf -v "${var_name}" '%s' "${value}"
@@ -232,11 +232,6 @@ confirm_yes_no() {
 
   if [[ "${AUTO_YES}" == "true" ]]; then
     return 0
-  fi
-
-  if [[ "${HAS_GUM}" == "true" && "${RUNNING_IN_WSL}" != "true" ]]; then
-    gum_confirm "$prompt"
-    return $?
   fi
 
   local answer=""
@@ -281,61 +276,6 @@ detect_platform() {
   fi
 
   section_done "Environment detection"
-}
-
-maybe_install_gum() {
-  if have_cmd gum; then
-    HAS_GUM="true"
-    ok "Optional prompt enhancer found: gum"
-    return
-  fi
-
-  echo
-  printf "%b\n" "${BOLD}Optional: install gum (terminal prompt enhancer)${RESET}"
-  printf "%b\n" "${DIM}gum makes password prompts show • characters so you can confirm pastes landed.${RESET}"
-  printf "%b\n" "${DIM}It is not required — setup works fine without it.${RESET}"
-  echo
-
-  local answer=""
-  read -r -p "$(prompt_text "Install gum? [y/N]")" answer
-  answer="${answer:-N}"
-  if [[ ! "${answer}" =~ ^[Yy]$ ]]; then
-    warn "Skipping gum — using standard terminal prompts."
-    return
-  fi
-
-  step "Installing gum"
-
-  case "${OS_FAMILY}" in
-    macOS)
-      if have_cmd brew; then
-        brew install gum
-      else
-        warn "Homebrew not found — cannot install gum without Homebrew. Skipping."
-        return
-      fi
-      ;;
-    WSL|Linux)
-      substep "Adding charmbracelet apt repository..."
-      sudo mkdir -p /etc/apt/keyrings
-      curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-      echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
-        | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
-      sudo apt-get update -q
-      sudo apt-get install -y gum
-      ;;
-    *)
-      warn "Unknown platform — skipping gum install."
-      return
-      ;;
-  esac
-
-  if have_cmd gum; then
-    HAS_GUM="true"
-    ok "gum installed — secret prompts will now show • per character."
-  else
-    warn "gum install appeared to succeed but gum is still not found. Falling back to silent prompts."
-  fi
 }
 
 #######################################
@@ -486,30 +426,22 @@ normalize_infra_location_if_needed() {
     return
   fi
 
-  warn "Current infra repo location: ${CURRENT_INFRA_DIR}"
-  warn "Expected infra repo location: ${TARGET_INFRA_DIR}"
-  substep "To match your desired final structure, the setup repo should live under ~/workspace/lms."
-
-  local source_url
-  source_url="$(get_current_infra_remote)"
-
-  local current_branch
-  current_branch="$(git -C "${CURRENT_INFRA_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
-
-  if [[ -d "${TARGET_INFRA_DIR}/.git" ]]; then
-    ok "A repo already exists at the target infra path"
-  else
-    step "Cloning infrastructure repo into the target workspace"
-    if [[ -n "${current_branch}" && "${current_branch}" != "HEAD" ]]; then
-      git clone -b "${current_branch}" "${source_url}" "${TARGET_INFRA_DIR}"
-    else
-      git clone "${source_url}" "${TARGET_INFRA_DIR}"
-    fi
-    ok "Cloned infrastructure repo into ${TARGET_INFRA_DIR}"
-  fi
-
-  warn "Re-running setup from the normalized location"
-  exec "${TARGET_INFRA_DIR}/scripts/setup.sh" "$@"
+  echo
+  hr
+  err "Setup must be run from the expected workspace location."
+  echo
+  warn "You ran setup from:  ${CURRENT_INFRA_DIR}"
+  warn "Expected location:   ${TARGET_INFRA_DIR}"
+  echo
+  substep "Please move the repo to the correct location and re-run setup:"
+  echo
+  printf "   %b\n" "${BOLD}mv ${CURRENT_INFRA_DIR} ${TARGET_INFRA_DIR}${RESET}"
+  printf "   %b\n" "${BOLD}cd ${TARGET_INFRA_DIR}${RESET}"
+  printf "   %b\n" "${BOLD}make setup${RESET}"
+  echo
+  hr
+  echo
+  exit 1
 }
 
 #######################################
@@ -560,6 +492,125 @@ clone_workspace_repos() {
   verify_repo_dir "learn-ops-infrastructure" "${TARGET_INFRA_DIR}"
 
   section_done "Repository cloning"
+}
+
+#######################################
+# Student fork helpers
+#######################################
+
+# Fork one NSS-Workshops repo to the student's account and echo the fork URL.
+# Idempotent: GitHub returns the existing fork if it already exists.
+ensure_fork_exists() {
+  local repo_name="$1"
+
+  substep "Forking ${NSS_ORG}/${repo_name} to ${GH_USERNAME}..."
+
+  local http_code
+  http_code="$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "${GITHUB_API}/repos/${NSS_ORG}/${repo_name}/forks")"
+
+  case "${http_code}" in
+    200|202)
+      : # success or async — will poll below
+      ;;
+    403)
+      die "GitHub denied the fork request for ${repo_name}. Ensure your PAT has 'repo' scope."
+      ;;
+    *)
+      die "Unexpected response (HTTP ${http_code}) when forking ${repo_name}."
+      ;;
+  esac
+
+  # Poll until the fork is visible (handles GitHub's async 202 case)
+  local attempts=0
+  local max_attempts=6
+  while [[ "${attempts}" -lt "${max_attempts}" ]]; do
+    local check_code
+    check_code="$(curl -s -o /dev/null -w "%{http_code}" \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      "${GITHUB_API}/repos/${GH_USERNAME}/${repo_name}")"
+
+    if [[ "${check_code}" == "200" ]]; then
+      ok "Fork ready: github.com/${GH_USERNAME}/${repo_name}"
+      echo "https://github.com/${GH_USERNAME}/${repo_name}.git"
+      return 0
+    fi
+
+    attempts=$(( attempts + 1 ))
+    substep "Waiting for fork to become available... (${attempts}/${max_attempts})"
+    sleep 5
+  done
+
+  die "Fork of ${repo_name} did not become available after ${max_attempts} attempts."
+}
+
+# Update git remotes so origin → student fork, upstream → NSS-Workshops.
+# Idempotent: exits early if origin already points to the fork.
+fixup_remotes() {
+  local label="$1"
+  local repo_dir="$2"
+  local upstream_url="$3"
+  local fork_url="$4"
+
+  substep "Configuring remotes for ${label}"
+
+  local current_origin
+  current_origin="$(git -C "${repo_dir}" remote get-url origin 2>/dev/null || true)"
+
+  if [[ "${current_origin}" == "${fork_url}" ]]; then
+    ok "${label}: remotes already configured"
+    # Ensure upstream exists even on re-run
+    if ! git -C "${repo_dir}" remote get-url upstream >/dev/null 2>&1; then
+      git -C "${repo_dir}" remote add upstream "${upstream_url}"
+    fi
+    return 0
+  fi
+
+  # Wire up upstream (rename existing origin, or set-url if upstream already present)
+  if git -C "${repo_dir}" remote get-url upstream >/dev/null 2>&1; then
+    git -C "${repo_dir}" remote set-url upstream "${upstream_url}"
+  else
+    git -C "${repo_dir}" remote rename origin upstream
+  fi
+
+  # Wire up origin → student fork
+  if git -C "${repo_dir}" remote get-url origin >/dev/null 2>&1; then
+    git -C "${repo_dir}" remote set-url origin "${fork_url}"
+  else
+    git -C "${repo_dir}" remote add origin "${fork_url}"
+  fi
+
+  ok "${label}: origin  → ${fork_url}"
+  ok "${label}: upstream → ${upstream_url}"
+}
+
+setup_student_forks() {
+  step "Setting up your personal forks"
+
+  substep "Each course repo will be forked to your GitHub account."
+  substep "You can push your work to 'origin' (your fork) and pull instructor"
+  substep "updates from 'upstream' (the course repo) at any time."
+
+  local -a repos=(
+    "learn-ops-api|${API_REPO_URL}|${API_DIR}"
+    "learn-ops-client|${CLIENT_REPO_URL}|${CLIENT_DIR}"
+    "service-monarch|${MONARCH_REPO_URL}|${MONARCH_DIR}"
+    "learn-ops-infrastructure|${INFRA_REPO_URL_DEFAULT}|${TARGET_INFRA_DIR}"
+  )
+
+  for entry in "${repos[@]}"; do
+    local repo_name upstream_url repo_dir fork_url
+    IFS='|' read -r repo_name upstream_url repo_dir <<< "${entry}"
+
+    fork_url="$(ensure_fork_exists "${repo_name}")"
+    fixup_remotes "${repo_name}" "${repo_dir}" "${upstream_url}" "${fork_url}"
+  done
+
+  section_done "Student forks"
 }
 
 #######################################
@@ -1291,7 +1342,6 @@ main() {
 
   header
   detect_platform
-  maybe_install_gum
   check_prereqs
   check_docker_running
   cleanup_docker_resources
@@ -1301,6 +1351,7 @@ main() {
   collect_user_identity
   collect_config
   check_org_membership
+  setup_student_forks
   write_env_files
   write_instructor_fixture
   validate_layout
