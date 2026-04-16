@@ -298,19 +298,78 @@ check_make_usage_note() {
   fi
 }
 
+print_docker_install_instructions() {
+  case "${OS_FAMILY}" in
+    macOS)
+      printf "   %b\n" "${BOLD}Install Docker Desktop:${RESET}"
+      printf "     %s\n" "1. Go to: https://www.docker.com/products/docker-desktop/"
+      printf "     %s\n" "2. Download and open the .dmg, drag Docker to Applications"
+      printf "     %s\n" "3. Launch Docker from Applications"
+      printf "     %s\n" "4. Wait for the whale icon to appear in the menu bar"
+      ;;
+    WSL)
+      printf "   %b\n" "${BOLD}Install Docker Desktop on Windows (not inside WSL):${RESET}"
+      printf "     %s\n" "1. Go to: https://www.docker.com/products/docker-desktop/"
+      printf "     %s\n" "2. Run the Windows installer"
+      printf "     %s\n" "3. After install: Settings → Resources → WSL Integration → enable your distro"
+      printf "     %s\n" "4. Restart Docker Desktop"
+      ;;
+    *)
+      printf "   %b\n" "${BOLD}Install Docker Engine:${RESET}"
+      printf "     %s\n" "1. curl -fsSL https://get.docker.com | sh"
+      printf "     %s\n" "   (or follow https://docs.docker.com/engine/install/)"
+      printf "     %s\n" "2. sudo usermod -aG docker \$USER"
+      printf "     %s\n" "3. newgrp docker          (or log out and back in)"
+      printf "     %s\n" "4. sudo systemctl enable --now docker"
+      ;;
+  esac
+}
+
+check_docker_installed() {
+  until have_cmd docker; do
+    err "Docker is not installed."
+    print_docker_install_instructions
+    printf "   Press Enter once Docker is installed, or Ctrl+C to cancel...\n"
+    read -r
+  done
+  ok "Found docker"
+}
+
+print_compose_install_instructions() {
+  case "${OS_FAMILY}" in
+    macOS|WSL)
+      printf "   %b\n" "${BOLD}Docker Desktop includes Compose v2 — ensure it is up to date:${RESET}"
+      printf "     %s\n" "1. Click the Docker icon → Check for Updates"
+      printf "     %s\n" "2. Or download the latest from https://www.docker.com/products/docker-desktop/"
+      printf "     %s\n" "3. Restart Docker Desktop after updating"
+      ;;
+    *)
+      printf "   %b\n" "${BOLD}Install the Docker Compose plugin:${RESET}"
+      printf "     %s\n" "Debian/Ubuntu:  sudo apt-get update && sudo apt-get install docker-compose-plugin"
+      printf "     %s\n" "Other distros:  https://docs.docker.com/compose/install/linux/"
+      ;;
+  esac
+}
+
+check_compose_available() {
+  until docker compose version >/dev/null 2>&1; do
+    err "docker compose is unavailable."
+    print_compose_install_instructions
+    printf "   Press Enter once Compose is available, or Ctrl+C to cancel...\n"
+    read -r
+  done
+  ok "Found docker compose"
+}
+
 check_prereqs() {
   step "Checking required tools"
 
   need_cmd git "Install Git, then rerun setup."
-  need_cmd docker "Install Docker Desktop / Docker Engine, then rerun setup."
+  check_docker_installed
   need_cmd python3 "Install Python 3, then rerun setup."
   need_cmd make "Install make, then rerun setup."
 
-  if docker compose version >/dev/null 2>&1; then
-    ok "Found docker compose"
-  else
-    die "docker compose is unavailable. Install a recent Docker version with Compose v2."
-  fi
+  check_compose_available
 
   check_make_usage_note
   section_done "Prerequisite checks"
