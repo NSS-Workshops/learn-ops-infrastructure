@@ -823,68 +823,6 @@ collect_user_identity() {
   section_done "Identity confirmed"
 }
 
-check_org_membership() {
-  step "Checking GitHub org membership"
-
-  local org="System-Explorer-Cohorts"
-  local api_url="https://api.github.com/user/memberships/orgs/${org}"
-  local http_code
-  http_code="$(curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    -H "Accept: application/vnd.github+json" \
-    "${api_url}")"
-
-  case "${http_code}" in
-    200)
-      local token_login
-      token_login="$(curl -s \
-        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-        -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/user" | grep -o '"login": *"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
-      if [ "${token_login}" != "${GH_USERNAME}" ]; then
-        warn "Token mismatch: the token belongs to '${token_login}', but you entered '${GH_USERNAME}' as your GitHub username."
-        substep "Please re-run setup using a token generated from the '${GH_USERNAME}' account."
-        exit 1
-      fi
-      ok "Confirmed: you are a member of github.com/organizations/${org}"
-      ;;
-    404)
-      warn "Your GitHub account does not appear to be a member of the ${org} org."
-      echo
-      substep "Visit: https://github.com/organizations/${org}/invitation"
-      substep "Request access or ask your instructor to invite you."
-      echo
-      while true; do
-        if ! confirm_yes_no "Press Y once you have been added to the org and are ready to continue"; then
-          die "Cannot continue without org membership."
-        fi
-        substep "Re-checking org membership..."
-        local recheck_code
-        recheck_code="$(curl -s -o /dev/null -w "%{http_code}" \
-          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-          -H "Accept: application/vnd.github+json" \
-          "${api_url}")"
-        if [ "${recheck_code}" = "200" ]; then
-          ok "Confirmed: you are now a member of github.com/organizations/${org}"
-          break
-        else
-          warn "Still not showing as a member (HTTP ${recheck_code}). GitHub can take a moment to update — try again."
-          echo
-        fi
-      done
-      ;;
-    *)
-      warn "Could not verify org membership automatically (GitHub API returned ${http_code})."
-      substep "This can happen if your token is missing the read:org scope or requires SSO authorization."
-      echo
-      substep "Verify manually: https://github.com/orgs/${org}/people"
-      echo
-      confirm_yes_no "Are you a member of the ${org} org?"
-      ;;
-  esac
-
-  section_done "Org membership"
-}
 
 prompt_github_pat() {
   echo
@@ -940,8 +878,54 @@ run_oauth_flow() {
   section_done "GitHub OAuth"
 }
 
+elevate_to_instructor() {
+  step "Elevating ${GH_USERNAME} to instructor"
+
+  local container="learning-platform-api"
+
+  if ! docker ps --filter "name=^${container}$" --filter "status=running" \
+       --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
+    err "Container '${container}' is not running."
+    warn "Start the stack first, then re-run this step."
+    die "Cannot elevate instructor — API container is not running."
+  fi
+
+  local py_code
+  py_code="$(cat <<'PYEOF'
+from django.contrib.auth.models import User, Group
+u = User.objects.filter(username='__GH_USERNAME__').first()
+if u is None:
+    raise SystemExit('USER_NOT_FOUND')
+g = Group.objects.get(pk=2)
+if u.is_staff and u.groups.filter(pk=2).exists():
+    print('already an instructor — nothing to do')
+else:
+    u.is_staff = True
+    u.save(update_fields=['is_staff'])
+    u.groups.add(g)
+    print('elevated: is_staff=True, added to Instructors group')
+PYEOF
+)"
+  py_code="${py_code//__GH_USERNAME__/${GH_USERNAME}}"
+
+  local output
+  output="$(docker exec "${container}" python3 manage.py shell -c "${py_code}" 2>&1)" || {
+    if printf '%s' "${output}" | grep -q "USER_NOT_FOUND"; then
+      err "User '${GH_USERNAME}' was not found in the database."
+      warn "OAuth may not have completed — try the authorization URL again, then re-run."
+      die "Elevation failed — user not found."
+    fi
+    err "Elevation failed:"
+    printf "   %s\n" "${output}"
+    die "Could not elevate ${GH_USERNAME} to instructor."
+  }
+
+  ok "  ${GH_USERNAME}: ${output}"
+  section_done "Instructor elevation"
+}
+
 write_instructor_fixture() {
-  step "Creating instructor fixture"
+  step "Patching instructor fixture (if found)"
 
   local fixture_dir="${API_DIR}/LearningAPI/fixtures"
   local fixture_path="${fixture_dir}/currentuser.json"
@@ -1002,31 +986,10 @@ if found_in:
         os.remove(cu_path)
         print(f"  Removed stale currentuser.json")
 else:
-    new_pk = max(used_pks) + 1 if used_pks else 1
-    record = [{
-        "model": "auth.user",
-        "pk": new_pk,
-        "fields": {
-            "password": "",
-            "last_login": None,
-            "is_superuser": False,
-            "username": username,
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email,
-            "is_staff": True,
-            "is_active": True,
-            "date_joined": today,
-            "groups": [2],
-            "user_permissions": [],
-        },
-    }]
-    with open(cu_path, "w") as f:
-        json.dump(record, f, indent=4)
-    print(f"  Wrote currentuser.json (pk={new_pk}) for {username}")
+    print(f"  {username} not found in existing fixtures — will elevate after OAuth login")
 PY
 
-  section_done "Instructor fixture"
+  section_done "Instructor fixture patch"
 }
 
 collect_config() {
@@ -1409,7 +1372,6 @@ main() {
   clone_workspace_repos
   collect_user_identity
   collect_config
-  check_org_membership
   setup_student_forks
   write_env_files
   write_instructor_fixture
@@ -1417,6 +1379,7 @@ main() {
   show_summary
   maybe_start_services
   run_oauth_flow
+  elevate_to_instructor
 
   echo
   printf "%b\n" "${GREEN}${BOLD}All done.${RESET}"
