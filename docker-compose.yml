@@ -44,7 +44,7 @@ services:
       - "3000:3000"
     volumes:
       - ../learn-ops-client:/app
-      - /app/node_modules
+      - client_node_modules:/app/node_modules
     networks:
       - learningplatform
   prometheus:
@@ -84,6 +84,7 @@ services:
 volumes:
   learning_platform_data:
   grafana_data:
+  client_node_modules:
 networks:
   learningplatform:
     external: true
