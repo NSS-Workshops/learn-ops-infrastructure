@@ -59,12 +59,3 @@ graph TD
     Hashtagger --> Slack
 ```
 
-
-## Getting Started
-
-1. Clone this repository into `~/workspace/lms/`
-2. `cd learn-ops-infrastructure`
-3. `make setup`
-
-The setup wizard will handle everything else — checking prerequisites, cloning the other repos, collecting credentials, and starting the stack. See [SETUP_README.md](./SETUP_README.md) for a full breakdown of what the wizard does.
-
