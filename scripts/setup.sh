@@ -76,6 +76,7 @@ GITHUB_API="https://api.github.com"
 #######################################
 OS_FAMILY=""
 MAC_ARCH=""
+WSL_ARCH=""
 RUNNING_IN_WSL="false"
 
 #######################################
@@ -275,6 +276,13 @@ detect_platform() {
       if grep -qi microsoft /proc/version 2>/dev/null || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
         RUNNING_IN_WSL="true"
         OS_FAMILY="WSL"
+        local uname_m
+        uname_m="$(uname -m)"
+        if [[ "${uname_m}" == "aarch64" ]]; then
+          WSL_ARCH="arm64"
+        else
+          WSL_ARCH="amd64"
+        fi
       fi
       ;;
     *)
@@ -285,7 +293,7 @@ detect_platform() {
   ok "Detected platform: ${OS_FAMILY}"
 
   if [[ "${OS_FAMILY}" == "WSL" ]]; then
-    ok "Running inside WSL"
+    ok "Running inside WSL (${WSL_ARCH})"
   fi
 
   if [[ "${OS_FAMILY}" == "Linux" ]]; then
@@ -337,11 +345,24 @@ print_docker_install_instructions() {
       printf "     %s\n" "* Docker asks you to sign in or create an account → click Skip (not required)"
       ;;
     WSL)
-      printf "   %b\n" "${BOLD}Install Docker Desktop on Windows (not inside WSL):${RESET}"
-      printf "     %s\n" "1. Go to: https://www.docker.com/products/docker-desktop/"
-      printf "     %s\n" "2. Run the Windows installer"
-      printf "     %s\n" "3. After install: Settings → Resources → WSL Integration → enable your distro"
-      printf "     %s\n" "4. Restart Docker Desktop"
+      local docker_win_url
+      if [[ "${WSL_ARCH}" == "arm64" ]]; then
+        docker_win_url="https://desktop.docker.com/win/main/arm64/Docker%20Desktop%20Installer.exe"
+        printf "   %b\n" "${BOLD}ARM64 Windows detected — Install Docker Desktop:${RESET}"
+      else
+        docker_win_url="https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+        printf "   %b\n" "${BOLD}AMD64 Windows detected — Install Docker Desktop:${RESET}"
+      fi
+      printf "     %s\n" "1. Download (run this in Windows, not WSL): ${docker_win_url}"
+      printf "     %s\n" "2. Run the installer"
+      printf "     %s\n" "3. Launch Docker Desktop from the Start Menu"
+      printf "     %s\n" "4. Accept the Docker terms of service when prompted"
+      printf "     %s\n" "5. Wait for the whale icon to appear in the system tray (bottom-right of taskbar)"
+      printf "     %s\n" "6. Settings → Resources → WSL Integration → enable Ubuntu"
+      printf "     %s\n" "7. Restart Docker Desktop"
+      printf "\n"
+      printf "   %b\n" "${BOLD}Heads up — you may see this popup during setup:${RESET}"
+      printf "     %s\n" "* Docker asks you to sign in or create an account → click Skip (not required)"
       ;;
     *)
       printf "   %b\n" "${BOLD}Install Docker Engine:${RESET}"
@@ -945,7 +966,10 @@ run_oauth_flow() {
   printf "   %b\n" "${BOLD}What to do:${RESET}"
   printf "   %s\n" "  1. Open the link below in your browser"
   printf "   %s\n" "  2. GitHub will ask you to authorize the LearnOps app — click Authorize"
-  printf "   %s\n" "  3. You will be redirected back to the local app — that means it worked"
+  printf "   %s\n" "  3. After authorizing, the browser will show a spinning globe and appear to hang — this is normal"
+  printf "   %s\n" "  4. Go to http://localhost:3000 and sign in"
+  printf "   %s\n" "  5. Once you have signed in, come back here and press Y"
+  printf "   %s\n" "     (the script will then elevate your role from student to instructor)"
   echo
   printf "   %b\n" "${BOLD}GitHub Authorization — LearnOps API${RESET}"
   printf "   %b\n" "${DIM}${auth_url}${RESET}"
@@ -957,7 +981,7 @@ run_oauth_flow() {
 
   echo
   printf "   %b\n" "${BOLD}What to expect:${RESET}"
-  printf "   %s\n" "  Success: GitHub redirects you back to the local app (localhost:3000)"
+  printf "   %s\n" "  Success: after authorizing, go to http://localhost:3000 and sign in there"
   printf "   %s\n" "  Error page: the API may still be loading — wait 30s and try the link again"
   printf "   %s\n" "  'Invalid client' from GitHub: check that OAuth credentials are set in your .env"
   echo

@@ -189,15 +189,47 @@ uninstall_docker_linux() {
   fi
 }
 
+uninstall_docker_wsl() {
+  if ! have_cmd powershell.exe; then
+    warn "powershell.exe not found — cannot reach the Windows host from this WSL environment"
+    warn "To uninstall manually: Windows → Settings → Apps → Docker Desktop → Uninstall"
+    return
+  fi
+
+  # Try the Docker Desktop installer's built-in uninstall command first.
+  # Docker Desktop is installed at this path on the Windows host by default.
+  local installer_wsl="/mnt/c/Program Files/Docker/Docker/Docker Desktop Installer.exe"
+  if [[ -f "${installer_wsl}" ]]; then
+    warn "Launching Docker Desktop uninstaller on Windows (a UAC prompt will appear)..."
+    if powershell.exe -Command \
+      "Start-Process -FilePath 'C:\Program Files\Docker\Docker\Docker Desktop Installer.exe' -ArgumentList 'uninstall' -Verb RunAs -Wait"; then
+      ok "Docker Desktop uninstalled from Windows"
+      return
+    fi
+    warn "Installer-based uninstall did not complete — trying winget..."
+  fi
+
+  # Fall back to winget if available.
+  if powershell.exe -NoProfile -Command "Get-Command winget -ErrorAction SilentlyContinue" 2>/dev/null | grep -q winget; then
+    warn "Uninstalling Docker Desktop via winget (a UAC prompt may appear)..."
+    if powershell.exe -Command "winget uninstall --id Docker.DockerDesktop --silent --accept-source-agreements"; then
+      ok "Docker Desktop uninstalled via winget"
+      return
+    fi
+    warn "winget uninstall failed"
+  fi
+
+  warn "Automated uninstall was not possible. To remove Docker Desktop manually:"
+  warn "  Windows → Settings → Apps → Docker Desktop → Uninstall"
+  warn "  OR run in an elevated PowerShell: winget uninstall Docker.DockerDesktop"
+}
+
 teardown_docker_install() {
   step "Uninstalling Docker"
   case "${OS_FAMILY}" in
     macOS) uninstall_docker_macos ;;
     Linux) uninstall_docker_linux ;;
-    WSL)
-      warn "Docker Desktop runs on Windows, not inside WSL."
-      warn "To uninstall: open Windows → Settings → Apps → Docker Desktop → Uninstall"
-      ;;
+    WSL)   uninstall_docker_wsl ;;
   esac
 }
 
