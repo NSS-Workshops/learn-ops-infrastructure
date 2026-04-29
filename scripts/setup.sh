@@ -75,6 +75,8 @@ GITHUB_API="https://api.github.com"
 # State
 #######################################
 OS_FAMILY=""
+MAC_ARCH=""
+WSL_ARCH=""
 RUNNING_IN_WSL="false"
 
 #######################################
@@ -82,6 +84,15 @@ RUNNING_IN_WSL="false"
 #######################################
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i :"${port}" -sTCP:LISTEN -t >/dev/null 2>&1
+  else
+    (echo >/dev/tcp/localhost/"${port}") 2>/dev/null
+  fi
 }
 
 hr() {
@@ -252,12 +263,26 @@ detect_platform() {
   case "${uname_s}" in
     Darwin)
       OS_FAMILY="macOS"
+      local uname_m
+      uname_m="$(uname -m)"
+      if [[ "${uname_m}" == "arm64" ]]; then
+        MAC_ARCH="arm64"
+      else
+        MAC_ARCH="amd64"
+      fi
       ;;
     Linux)
       OS_FAMILY="Linux"
       if grep -qi microsoft /proc/version 2>/dev/null || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
         RUNNING_IN_WSL="true"
         OS_FAMILY="WSL"
+        local uname_m
+        uname_m="$(uname -m)"
+        if [[ "${uname_m}" == "aarch64" ]]; then
+          WSL_ARCH="arm64"
+        else
+          WSL_ARCH="amd64"
+        fi
       fi
       ;;
     *)
@@ -268,7 +293,7 @@ detect_platform() {
   ok "Detected platform: ${OS_FAMILY}"
 
   if [[ "${OS_FAMILY}" == "WSL" ]]; then
-    ok "Running inside WSL"
+    ok "Running inside WSL (${WSL_ARCH})"
   fi
 
   if [[ "${OS_FAMILY}" == "Linux" ]]; then
@@ -301,18 +326,43 @@ check_make_usage_note() {
 print_docker_install_instructions() {
   case "${OS_FAMILY}" in
     macOS)
-      printf "   %b\n" "${BOLD}Install Docker Desktop:${RESET}"
-      printf "     %s\n" "1. Go to: https://www.docker.com/products/docker-desktop/"
-      printf "     %s\n" "2. Download and open the .dmg, drag Docker to Applications"
+      local docker_url
+      if [[ "${MAC_ARCH}" == "arm64" ]]; then
+        docker_url="https://desktop.docker.com/mac/main/arm64/Docker.dmg"
+        printf "   %b\n" "${BOLD}Apple Silicon Mac detected — Install Docker Desktop:${RESET}"
+      else
+        docker_url="https://desktop.docker.com/mac/main/amd64/Docker.dmg"
+        printf "   %b\n" "${BOLD}Intel Mac detected — Install Docker Desktop:${RESET}"
+      fi
+      printf "     %s\n" "1. Download: ${docker_url}"
+      printf "     %s\n" "2. Open the .dmg and drag Docker to Applications"
       printf "     %s\n" "3. Launch Docker from Applications"
-      printf "     %s\n" "4. Wait for the whale icon to appear in the menu bar"
+      printf "     %s\n" "4. Accept the Docker terms of service when prompted"
+      printf "     %s\n" "5. Wait for the whale icon to appear in the menu bar"
+      printf "\n"
+      printf "   %b\n" "${BOLD}Heads up — you may see these popups during setup:${RESET}"
+      printf "     %s\n" "* macOS asks: \"Terminal would like to access data from other apps\" → click Allow"
+      printf "     %s\n" "* Docker asks you to sign in or create an account → click Skip (not required)"
       ;;
     WSL)
-      printf "   %b\n" "${BOLD}Install Docker Desktop on Windows (not inside WSL):${RESET}"
-      printf "     %s\n" "1. Go to: https://www.docker.com/products/docker-desktop/"
-      printf "     %s\n" "2. Run the Windows installer"
-      printf "     %s\n" "3. After install: Settings → Resources → WSL Integration → enable your distro"
-      printf "     %s\n" "4. Restart Docker Desktop"
+      local docker_win_url
+      if [[ "${WSL_ARCH}" == "arm64" ]]; then
+        docker_win_url="https://desktop.docker.com/win/main/arm64/Docker%20Desktop%20Installer.exe"
+        printf "   %b\n" "${BOLD}ARM64 Windows detected — Install Docker Desktop:${RESET}"
+      else
+        docker_win_url="https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+        printf "   %b\n" "${BOLD}AMD64 Windows detected — Install Docker Desktop:${RESET}"
+      fi
+      printf "     %s\n" "1. Download (run this in Windows, not WSL): ${docker_win_url}"
+      printf "     %s\n" "2. Run the installer"
+      printf "     %s\n" "3. Launch Docker Desktop from the Start Menu"
+      printf "     %s\n" "4. Accept the Docker terms of service when prompted"
+      printf "     %s\n" "5. Wait for the whale icon to appear in the system tray (bottom-right of taskbar)"
+      printf "     %s\n" "6. Settings → Resources → WSL Integration → enable Ubuntu"
+      printf "     %s\n" "7. Restart Docker Desktop"
+      printf "\n"
+      printf "   %b\n" "${BOLD}Heads up — you may see this popup during setup:${RESET}"
+      printf "     %s\n" "* Docker asks you to sign in or create an account → click Skip (not required)"
       ;;
     *)
       printf "   %b\n" "${BOLD}Install Docker Engine:${RESET}"
@@ -331,6 +381,7 @@ check_docker_installed() {
     print_docker_install_instructions
     printf "   Press Enter once Docker is installed, or Ctrl+C to cancel...\n"
     read -r
+    hash -r 2>/dev/null || true
   done
   ok "Found docker"
 }
@@ -454,6 +505,65 @@ check_docker_versions() {
       ok "Docker Desktop version ${desktop_version} meets requirement (>= ${required_desktop})"
     fi
   fi
+}
+
+show_port_blocker() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids="$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null || true)"
+    if [[ -n "${pids}" ]]; then
+      printf "     %s\n" "What's using port ${port}:"
+      lsof -i :"${port}" -sTCP:LISTEN -P -n 2>/dev/null | tail -n +2 | while IFS= read -r line; do
+        printf "       %s\n" "${line}"
+      done
+      printf "     %s\n" "To stop it, run:"
+      for pid in ${pids}; do
+        printf "       %s\n" "kill ${pid}"
+      done
+    fi
+  else
+    printf "     %s\n" "Run this to find what's using port ${port}:"
+    printf "       %s\n" "sudo ss -tlnp | grep :${port}"
+  fi
+}
+
+check_port_conflicts() {
+  step "Checking for port conflicts"
+
+  local -a required_ports=(5432 8000 3000)
+  local -a optional_ports=(9090 3001 9187 5678 6379)
+  local -A port_names=(
+    [5432]="PostgreSQL"
+    [8000]="Django API"
+    [3000]="React Client"
+    [9090]="Prometheus"
+    [3001]="Grafana"
+    [9187]="PostgreSQL Exporter"
+    [5678]="Python Debugger"
+    [6379]="Valkey Cache"
+  )
+
+  for port in "${optional_ports[@]}"; do
+    if port_in_use "${port}"; then
+      warn "Port ${port} (${port_names[${port}]}) is already in use — monitoring/debug may be affected"
+    else
+      ok "Port ${port} (${port_names[${port}]}) is free"
+    fi
+  done
+
+  for port in "${required_ports[@]}"; do
+    while port_in_use "${port}"; do
+      err "Port ${port} (${port_names[${port}]}) is already in use — must be free before setup can continue"
+      show_port_blocker "${port}"
+      printf "   Press Enter once port %s is free, or Ctrl+C to cancel...\n" "${port}"
+      read -r
+      hash -r 2>/dev/null || true
+    done
+    ok "Port ${port} (${port_names[${port}]}) is free"
+  done
+
+  section_done "Port conflict check"
 }
 
 #######################################
@@ -836,9 +946,9 @@ prompt_github_pat() {
   printf "   %s\n" "6. In the Note field, enter: Learning Platform Token"
   printf "   %s\n" "7. Set expiration to 90 days"
   printf "   %s\n" "8. Select these permissions:"
+  printf "      %s\n" "- repo"
   printf "      %s\n" "- admin:org"
   printf "      %s\n" "- admin:org_hook"
-  printf "      %s\n" "- repo"
   printf "   %s\n" "9. Click Generate Token at the bottom — keep the window open!"
   echo
 
@@ -856,7 +966,10 @@ run_oauth_flow() {
   printf "   %b\n" "${BOLD}What to do:${RESET}"
   printf "   %s\n" "  1. Open the link below in your browser"
   printf "   %s\n" "  2. GitHub will ask you to authorize the LearnOps app — click Authorize"
-  printf "   %s\n" "  3. You will be redirected back to the local app — that means it worked"
+  printf "   %s\n" "  3. After authorizing, the browser will show a spinning globe and appear to hang — this is normal"
+  printf "   %s\n" "  4. Go to http://localhost:3000 and sign in"
+  printf "   %s\n" "  5. Once you have signed in, come back here and press Y"
+  printf "   %s\n" "     (the script will then elevate your role from student to instructor)"
   echo
   printf "   %b\n" "${BOLD}GitHub Authorization — LearnOps API${RESET}"
   printf "   %b\n" "${DIM}${auth_url}${RESET}"
@@ -868,7 +981,7 @@ run_oauth_flow() {
 
   echo
   printf "   %b\n" "${BOLD}What to expect:${RESET}"
-  printf "   %s\n" "  Success: GitHub redirects you back to the local app (localhost:3000)"
+  printf "   %s\n" "  Success: after authorizing, go to http://localhost:3000 and sign in there"
   printf "   %s\n" "  Error page: the API may still be loading — wait 30s and try the link again"
   printf "   %s\n" "  'Invalid client' from GitHub: check that OAuth credentials are set in your .env"
   echo
@@ -1366,6 +1479,7 @@ main() {
   detect_platform
   check_prereqs
   check_docker_running
+  check_port_conflicts
   cleanup_docker_resources
   ensure_workspace_root
   normalize_infra_location_if_needed "$@"
