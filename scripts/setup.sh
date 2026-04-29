@@ -528,39 +528,43 @@ show_port_blocker() {
   fi
 }
 
+port_name() {
+  case "$1" in
+    5432) printf "PostgreSQL" ;;
+    8000) printf "Django API" ;;
+    3000) printf "React Client" ;;
+    9090) printf "Prometheus" ;;
+    3001) printf "Grafana" ;;
+    9187) printf "PostgreSQL Exporter" ;;
+    5678) printf "Python Debugger" ;;
+    6379) printf "Valkey Cache" ;;
+    *)    printf "Unknown" ;;
+  esac
+}
+
 check_port_conflicts() {
   step "Checking for port conflicts"
 
   local -a required_ports=(5432 8000 3000)
   local -a optional_ports=(9090 3001 9187 5678 6379)
-  local -A port_names=(
-    [5432]="PostgreSQL"
-    [8000]="Django API"
-    [3000]="React Client"
-    [9090]="Prometheus"
-    [3001]="Grafana"
-    [9187]="PostgreSQL Exporter"
-    [5678]="Python Debugger"
-    [6379]="Valkey Cache"
-  )
 
   for port in "${optional_ports[@]}"; do
     if port_in_use "${port}"; then
-      warn "Port ${port} (${port_names[${port}]}) is already in use — monitoring/debug may be affected"
+      warn "Port ${port} ($(port_name "${port}")) is already in use — monitoring/debug may be affected"
     else
-      ok "Port ${port} (${port_names[${port}]}) is free"
+      ok "Port ${port} ($(port_name "${port}")) is free"
     fi
   done
 
   for port in "${required_ports[@]}"; do
     while port_in_use "${port}"; do
-      err "Port ${port} (${port_names[${port}]}) is already in use — must be free before setup can continue"
+      err "Port ${port} ($(port_name "${port}")) is already in use — must be free before setup can continue"
       show_port_blocker "${port}"
       printf "   Press Enter once port %s is free, or Ctrl+C to cancel...\n" "${port}"
       read -r
       hash -r 2>/dev/null || true
     done
-    ok "Port ${port} (${port_names[${port}]}) is free"
+    ok "Port ${port} ($(port_name "${port}")) is free"
   done
 
   section_done "Port conflict check"
