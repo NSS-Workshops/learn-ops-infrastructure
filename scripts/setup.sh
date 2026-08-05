@@ -307,6 +307,8 @@ detect_platform() {
         else
           WSL_ARCH="amd64"
         fi
+      elif [[ -n "${WINDIR:-}" || -n "${SystemRoot:-}" ]]; then
+        die "This looks like a Windows-hosted shell (e.g. Git Bash, MSYS2, or Cygwin) rather than WSL. This script must be run inside Ubuntu on WSL. Install WSL (https://learn.microsoft.com/windows/wsl/install), open the Ubuntu app, and rerun this script from there."
       fi
       ;;
     *)
