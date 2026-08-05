@@ -554,7 +554,7 @@ show_port_blocker() {
 
 port_name() {
   case "$1" in
-    5432) printf "PostgreSQL" ;;
+    5433) printf "PostgreSQL" ;;
     8000) printf "Django API" ;;
     3000) printf "React Client" ;;
     9090) printf "Prometheus" ;;
@@ -569,7 +569,7 @@ port_name() {
 check_port_conflicts() {
   step "Checking for port conflicts"
 
-  local -a required_ports=(5432 8000 3000)
+  local -a required_ports=(5433 8000 3000)
   local -a optional_ports=(9090 3001 9187 5678 6379)
 
   for port in "${optional_ports[@]}"; do
