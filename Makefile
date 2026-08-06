@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup doctor teardown up up-api up-client-api down logs reset restart ps
+.PHONY: setup doctor teardown pull up up-api up-client-api down logs reset restart ps
 
 setup:
 	./scripts/setup.sh
@@ -11,7 +11,10 @@ doctor:
 teardown:
 	./scripts/teardown.sh
 
-up:
+pull:
+	docker compose pull --ignore-buildable
+
+up: pull
 	docker compose up --build -d
 	docker compose logs -f
 
@@ -29,7 +32,7 @@ down:
 logs:
 	docker compose logs -f
 
-restart:
+restart: pull
 	docker compose down
 	docker compose up --build -d
 	docker compose logs -f

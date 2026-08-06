@@ -1505,6 +1505,43 @@ monitor_services() {
   section_done "Services"
 }
 
+pull_images_with_retry() {
+  step "Pulling required images"
+  substep "Pulling one image at a time so a single registry hiccup doesn't take down the whole stack."
+
+  local max_attempts=3
+  local delay=5
+  local services svc attempt err_log
+
+  services="$(cd "${TARGET_INFRA_DIR}" && docker compose config --services)"
+  err_log="$(mktemp)"
+
+  for svc in ${services}; do
+    attempt=1
+    while true; do
+      substep "Pulling ${svc} (attempt ${attempt}/${max_attempts})..."
+      if (cd "${TARGET_INFRA_DIR}" && docker compose pull --ignore-buildable "${svc}") >"${err_log}" 2>&1; then
+        ok "${svc} ready"
+        break
+      fi
+
+      if [[ "${attempt}" -ge "${max_attempts}" ]]; then
+        err "Failed to pull the image for '${svc}' after ${max_attempts} attempts."
+        cat "${err_log}"
+        rm -f "${err_log}"
+        die "Could not pull the image for '${svc}'. Check your network connection to its registry (Docker Hub or quay.io) and rerun setup."
+      fi
+
+      warn "Pull failed for ${svc}, retrying in ${delay}s..."
+      sleep "${delay}"
+      attempt=$(( attempt + 1 ))
+    done
+  done
+
+  rm -f "${err_log}"
+  section_done "Image pulls"
+}
+
 maybe_start_services() {
   step "Optional: start the stack now"
 
@@ -1512,6 +1549,7 @@ maybe_start_services() {
   substep "This command uses the docker-compose.yml in learn-ops-infrastructure."
 
   if confirm_yes_no "Start services now?"; then
+    pull_images_with_retry
     (
       cd "${TARGET_INFRA_DIR}"
       docker compose up -d
@@ -1520,16 +1558,11 @@ maybe_start_services() {
     warn "If your compose file only includes client/api/database today, add Valkey and Monarch there for full-stack startup."
 
     monitor_services
-
-    if confirm_yes_no "Open the app in your browser?"; then
-      open_in_browser "http://localhost:3000"
-      open_in_browser "http://localhost:8000/admin"
-    fi
   else
     warn "Skipped starting services"
     echo
     printf "%b\n" "${BOLD}When you are ready to start the stack, run:${RESET}"
-    printf "   %s\n" "cd ${TARGET_INFRA_DIR} && docker compose up -d"
+    printf "   %s\n" "cd ${TARGET_INFRA_DIR} && docker compose pull --ignore-buildable && docker compose up -d"
     echo
     printf "%b\n" "${GREEN}${BOLD}Setup complete.${RESET}"
     printf "%b\n" "${DIM}Your Learning Platform workspace is ready to use.${RESET}"
@@ -1804,6 +1837,8 @@ main() {
   echo
   printf "%b\n" "${GREEN}${BOLD}All done.${RESET}"
   printf "%b\n" "${DIM}Your Learning Platform workspace is ready to use.${RESET}"
+  printf "   %s\n" "Client: http://localhost:3000"
+  printf "   %s\n" "API:    http://localhost:8000"
   echo
 }
 
