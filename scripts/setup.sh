@@ -77,7 +77,6 @@ GITHUB_API="https://api.github.com"
 OS_FAMILY=""
 MAC_ARCH=""
 WSL_ARCH=""
-RUNNING_IN_WSL="false"
 
 #######################################
 # Utilities
@@ -298,7 +297,6 @@ detect_platform() {
     Linux)
       OS_FAMILY="Linux"
       if grep -qi microsoft /proc/version 2>/dev/null || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-        RUNNING_IN_WSL="true"
         OS_FAMILY="WSL"
         local uname_m
         uname_m="$(uname -m)"
@@ -599,14 +597,6 @@ check_port_conflicts() {
 #######################################
 # Infra repo normalization
 #######################################
-get_current_infra_remote() {
-  local remote=""
-  if git -C "${CURRENT_INFRA_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    remote="$(git -C "${CURRENT_INFRA_DIR}" remote get-url origin 2>/dev/null || true)"
-  fi
-  echo "${remote:-${INFRA_REPO_URL_DEFAULT}}"
-}
-
 ensure_workspace_root() {
   step "Preparing workspace root"
 
